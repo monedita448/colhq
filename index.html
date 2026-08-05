@@ -242,9 +242,9 @@
   .browser-topbar span{cursor:pointer;transition:transform 0.2s ease,filter 0.2s ease;}
   .browser-topbar span:hover{transform:scale(1.18);filter:brightness(1.15);}
   .browser-topbar span:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
-  .browser-tabs{display:flex;gap:2px;padding:12px 12px 0;background:#0d0d0e;overflow-x:auto;scrollbar-width:none;}
+  .browser-tabs{display:flex;padding:12px 12px 0;background:#0d0d0e;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;}
   .browser-tabs::-webkit-scrollbar{display:none;}
-  .browser-tab{font-family:var(--sans);font-size:12.5px;letter-spacing:0.01em;padding:7px 16px;margin-bottom:8px;border:1px solid transparent;border-radius:100px;cursor:pointer;white-space:nowrap;color:var(--muted);background:transparent;transition:color 0.25s ease, border-color 0.25s ease, background 0.25s ease;}
+  .browser-tab{flex:0 0 100%;scroll-snap-align:center;display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-size:13px;letter-spacing:0.01em;padding:9px 16px;margin-bottom:8px;border:1px solid transparent;border-radius:100px;cursor:pointer;white-space:nowrap;text-align:center;color:var(--muted);background:transparent;transition:color 0.25s ease, border-color 0.25s ease, background 0.25s ease;}
   .browser-tab:hover{color:var(--white);}
   .browser-tab.active{color:var(--accent-text);border-color:var(--accent);background:var(--accent-soft);}
   .work-panel{display:none;}
@@ -887,21 +887,62 @@
     menuBtn.textContent = '☰';
   }));
 
-  // work section browser tabs — switch between projects
+  // work section browser tabs — switch between projects. the tab bar shows
+  // only the current project's name; scrolling/swiping it picks a different
+  // one, and it also auto-scrolls to stay in sync whenever the active project
+  // changes some other way (clicking a name, or clicking through images).
+  const workTabsBar = document.getElementById('workTabs');
   const workTabs = Array.from(document.querySelectorAll('.browser-tab'));
   const workPanels = Array.from(document.querySelectorAll('.work-panel'));
-  function activateWorkTab(idx) {
+  let activeWorkIdx = Math.max(0, workTabs.findIndex(t => t.classList.contains('active')));
+  function activateWorkTab(idx, opts) {
+    opts = opts || {};
     if (!workTabs.length || !workPanels.length) return;
     const clamped = (idx + workTabs.length) % workTabs.length;
-    workTabs.forEach((t, i) => t.classList.toggle('active', i === clamped));
+    activeWorkIdx = clamped;
+    workTabs.forEach((t, i) => {
+      t.classList.toggle('active', i === clamped);
+      t.setAttribute('aria-current', i === clamped ? 'true' : 'false');
+    });
     workPanels.forEach((p, i) => p.classList.toggle('active', i === clamped));
     const panel = workPanels[clamped];
     const track = panel && panel.querySelector('.wm-track');
     if (track) track.scrollTo({ left: 0, behavior: 'auto' });
     const dots = panel && panel.querySelector('.wm-dots');
     if (dots) dots.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === 0));
+    if (!opts.skipScroll && workTabsBar) {
+      workTabs[clamped].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
   }
   workTabs.forEach((tab, i) => tab.addEventListener('click', () => activateWorkTab(i)));
+
+  if (workTabsBar) {
+    // let an ordinary vertical mouse wheel drive this horizontal name bar too
+    workTabsBar.addEventListener('wheel', (e) => {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        workTabsBar.scrollLeft += e.deltaY;
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    // once a scroll/swipe settles, whichever name is centered becomes the
+    // active project — this is what lets scrolling the names pick a sample.
+    let workScrollSettle = null;
+    workTabsBar.addEventListener('scroll', () => {
+      clearTimeout(workScrollSettle);
+      workScrollSettle = setTimeout(() => {
+        const barRect = workTabsBar.getBoundingClientRect();
+        const barCenter = barRect.left + barRect.width / 2;
+        let nearest = 0, nearestDist = Infinity;
+        workTabs.forEach((tab, i) => {
+          const r = tab.getBoundingClientRect();
+          const dist = Math.abs((r.left + r.width / 2) - barCenter);
+          if (dist < nearestDist) { nearestDist = dist; nearest = i; }
+        });
+        if (nearest !== activeWorkIdx) activateWorkTab(nearest, { skipScroll: true });
+      }, 130);
+    }, { passive: true });
+  }
 
   // browser-topbar traffic lights — clicking any of them jumps to Contact
   document.querySelectorAll('.browser-topbar span').forEach(dot => {
