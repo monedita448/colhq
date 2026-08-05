@@ -242,7 +242,7 @@
   .browser-topbar span{cursor:pointer;transition:transform 0.2s ease,filter 0.2s ease;}
   .browser-topbar span:hover{transform:scale(1.18);filter:brightness(1.15);}
   .browser-topbar span:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
-  .browser-tabs{display:flex;gap:2px;padding:12px 12px 0;background:#0d0d0e;overflow-x:auto;scrollbar-width:none;}
+  .browser-tabs{display:flex;gap:2px;padding:12px 12px 0;background:#0d0d0e;overflow-x:auto;scrollbar-width:none;mask-image:linear-gradient(to right, transparent 0, #000 44px, #000 calc(100% - 44px), transparent 100%);-webkit-mask-image:linear-gradient(to right, transparent 0, #000 44px, #000 calc(100% - 44px), transparent 100%);}
   .browser-tabs::-webkit-scrollbar{display:none;}
   .browser-tab{font-family:var(--sans);font-size:12.5px;letter-spacing:0.01em;padding:7px 16px;margin-bottom:8px;border:1px solid transparent;border-radius:100px;cursor:pointer;white-space:nowrap;color:var(--muted);background:transparent;transition:color 0.25s ease, border-color 0.25s ease, background 0.25s ease;}
   .browser-tab:hover{color:var(--white);}
@@ -910,7 +910,6 @@
     bar.appendChild(afterFrag);
 
     const allTabs = Array.from(bar.querySelectorAll('.browser-tab'));
-    let currentDomIndex = projectCount + Math.max(0, originals.findIndex(t => t.classList.contains('active')));
 
     function setWidth() { return bar.scrollWidth / 3; }
 
@@ -935,49 +934,58 @@
       else bar.scrollLeft = target;
     }
 
+    // keeps whatever is currently in view within the middle third of the
+    // tripled row — checked continuously (not just after a click) so that
+    // manual dragging/swiping loops forever too, in either direction
     function wrapIfNeeded() {
       const w = setWidth();
-      if (bar.scrollLeft < w * 0.5) {
-        bar.scrollLeft += w;
-        currentDomIndex += projectCount;
-      } else if (bar.scrollLeft > w * 1.5) {
-        bar.scrollLeft -= w;
-        currentDomIndex -= projectCount;
-      }
+      if (bar.scrollLeft < w * 0.5) bar.scrollLeft += w;
+      else if (bar.scrollLeft > w * 1.5) bar.scrollLeft -= w;
+    }
+    let wrapScheduled = false;
+    bar.addEventListener('scroll', () => {
+      if (wrapScheduled) return;
+      wrapScheduled = true;
+      requestAnimationFrame(() => { wrapIfNeeded(); wrapScheduled = false; });
+    }, { passive: true });
+
+    // pick whichever copy of a project (of the 3 on the row) sits closest to
+    // wherever the view currently is, so centering never has to jump far
+    function nearestInstance(pIdx) {
+      const candidates = allTabs.filter(t => Number(t.getAttribute('data-idx')) === pIdx);
+      const barCenter = bar.getBoundingClientRect().left + bar.getBoundingClientRect().width / 2;
+      let best = candidates[0], bestDist = Infinity;
+      candidates.forEach(c => {
+        const r = c.getBoundingClientRect();
+        const dist = Math.abs((r.left + r.width / 2) - barCenter);
+        if (dist < bestDist) { bestDist = dist; best = c; }
+      });
+      return best;
     }
 
-    function activate(domIndex, opts) {
+    function activate(pIdx, opts) {
       opts = opts || {};
-      const pIdx = ((domIndex % projectCount) + projectCount) % projectCount;
-      currentDomIndex = domIndex;
-      allTabs.forEach(t => t.classList.toggle('active', Number(t.getAttribute('data-idx')) === pIdx));
-      workPanels.forEach((p, i) => p.classList.toggle('active', i === pIdx));
-      const panel = workPanels[pIdx];
+      const wrapped = ((pIdx % projectCount) + projectCount) % projectCount;
+      allTabs.forEach(t => t.classList.toggle('active', Number(t.getAttribute('data-idx')) === wrapped));
+      workPanels.forEach((p, i) => p.classList.toggle('active', i === wrapped));
+      const panel = workPanels[wrapped];
       const track = panel && panel.querySelector('.wm-track');
       if (track) track.scrollTo({ left: 0, behavior: 'auto' });
       const dots = panel && panel.querySelector('.wm-dots');
       if (dots) dots.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === 0));
-      if (!opts.skipScroll) {
-        centerTab(allTabs[domIndex], true);
-        setTimeout(wrapIfNeeded, 420);
-      }
+      if (!opts.skipScroll) centerTab(opts.el || nearestInstance(wrapped), true);
     }
 
-    allTabs.forEach((tab, domIdx) => tab.addEventListener('click', () => activate(domIdx)));
+    allTabs.forEach(tab => tab.addEventListener('click', () => {
+      activate(Number(tab.getAttribute('data-idx')), { el: tab });
+    }));
 
     // project-index entry point used elsewhere (e.g. clicking through a
-    // project's images advances to the next one) — keeps spinning the same
-    // direction from wherever the wheel currently is, rather than jumping
-    window.activateWorkTab = function (pIdx) {
-      const wrappedP = ((pIdx % projectCount) + projectCount) % projectCount;
-      const currentP = ((currentDomIndex % projectCount) + projectCount) % projectCount;
-      let diff = wrappedP - currentP;
-      if (diff > projectCount / 2) diff -= projectCount;
-      if (diff < -projectCount / 2) diff += projectCount;
-      activate(currentDomIndex + diff);
-    };
+    // project's images advances to the next one)
+    window.activateWorkTab = function (pIdx) { activate(pIdx); };
 
-    centerTab(allTabs[currentDomIndex], false);
+    const startIdx = Math.max(0, originals.findIndex(t => t.classList.contains('active')));
+    centerTab(nearestInstance(startIdx), false);
   })();
 
   // browser-topbar traffic lights — clicking any of them jumps to Contact
