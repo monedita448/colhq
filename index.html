@@ -900,6 +900,9 @@
     if (track) track.scrollTo({ left: 0, behavior: 'auto' });
     const dots = panel && panel.querySelector('.wm-dots');
     if (dots) dots.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === 0));
+    // slide the name row so whichever project is now active sits centered —
+    // like a flat wheel, with neighboring names peeking in on either side
+    workTabs[clamped].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   }
   workTabs.forEach((tab, i) => tab.addEventListener('click', () => activateWorkTab(i)));
 
