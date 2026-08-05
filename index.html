@@ -244,7 +244,6 @@
   .browser-topbar span:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
   .browser-tabs{display:flex;gap:2px;padding:12px 12px 0;background:#0d0d0e;overflow-x:auto;scrollbar-width:none;}
   .browser-tabs::-webkit-scrollbar{display:none;}
-  .browser-tabs-spacer{flex:0 0 50%;}
   .browser-tab{font-family:var(--sans);font-size:12.5px;letter-spacing:0.01em;padding:7px 16px;margin-bottom:8px;border:1px solid transparent;border-radius:100px;cursor:pointer;white-space:nowrap;color:var(--muted);background:transparent;transition:color 0.25s ease, border-color 0.25s ease, background 0.25s ease;}
   .browser-tab:hover{color:var(--white);}
   .browser-tab.active{color:var(--accent-text);border-color:var(--accent);background:var(--accent-soft);}
@@ -431,7 +430,6 @@
     <div class="browser-shell reveal">
       <div class="browser-topbar"><span class="r"></span><span class="a"></span><span class="g"></span></div>
       <div class="browser-tabs" id="workTabs">
-        <span class="browser-tabs-spacer" aria-hidden="true"></span>
         <button type="button" class="browser-tab active" data-url="pslroofrepair.com">PSL Roof Repair</button>
         <button type="button" class="browser-tab" data-url="trendsettersbarbershop.com">Trendsetters</button>
         <button type="button" class="browser-tab" data-url="cerrajero24horas.co">Cerrajero 24h</button>
@@ -442,7 +440,6 @@
         <button type="button" class="browser-tab" data-url="internal.col.systems/promax · private">Pro Max Parts</button>
         <button type="button" class="browser-tab" data-url="strategicglobal.app">Strategic Ai</button>
         <button type="button" class="browser-tab" data-url="hitscend.com">HitScend</button>
-        <span class="browser-tabs-spacer" aria-hidden="true"></span>
       </div>
       <div class="browser-viewport" id="workViewport">
 
@@ -890,24 +887,98 @@
     menuBtn.textContent = '☰';
   }));
 
-  // work section browser tabs — switch between projects
-  const workTabs = Array.from(document.querySelectorAll('.browser-tab'));
-  const workPanels = Array.from(document.querySelectorAll('.work-panel'));
-  function activateWorkTab(idx) {
-    if (!workTabs.length || !workPanels.length) return;
-    const clamped = (idx + workTabs.length) % workTabs.length;
-    workTabs.forEach((t, i) => t.classList.toggle('active', i === clamped));
-    workPanels.forEach((p, i) => p.classList.toggle('active', i === clamped));
-    const panel = workPanels[clamped];
-    const track = panel && panel.querySelector('.wm-track');
-    if (track) track.scrollTo({ left: 0, behavior: 'auto' });
-    const dots = panel && panel.querySelector('.wm-dots');
-    if (dots) dots.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === 0));
-    // slide the name row so whichever project is now active sits centered —
-    // like a flat wheel, with neighboring names peeking in on either side
-    workTabs[clamped].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-  }
-  workTabs.forEach((tab, i) => tab.addEventListener('click', () => activateWorkTab(i)));
+  // work section browser tabs — switch between projects. the name row behaves
+  // like a flat wheel: the active project's name is always centered, and the
+  // row is tripled (a hidden clone before and after the real names) so that
+  // scrolling or clicking past either end loops around instead of stopping —
+  // as a name spins off the right edge, the same name reappears on the left.
+  // (native `scrollIntoView({behavior:'smooth'})` silently fails to scroll on
+  // this page, so centering is animated by hand instead.)
+  (function () {
+    const bar = document.getElementById('workTabs');
+    const workPanels = Array.from(document.querySelectorAll('.work-panel'));
+    const originals = bar ? Array.from(bar.querySelectorAll('.browser-tab')) : [];
+    const projectCount = originals.length;
+    if (!bar || !projectCount || !workPanels.length) return;
+
+    originals.forEach((tab, i) => tab.setAttribute('data-idx', i));
+    const beforeFrag = document.createDocumentFragment();
+    originals.forEach(t => beforeFrag.appendChild(t.cloneNode(true)));
+    bar.insertBefore(beforeFrag, bar.firstChild);
+    const afterFrag = document.createDocumentFragment();
+    originals.forEach(t => afterFrag.appendChild(t.cloneNode(true)));
+    bar.appendChild(afterFrag);
+
+    const allTabs = Array.from(bar.querySelectorAll('.browser-tab'));
+    let currentDomIndex = projectCount + Math.max(0, originals.findIndex(t => t.classList.contains('active')));
+
+    function setWidth() { return bar.scrollWidth / 3; }
+
+    function animateScrollTo(target, duration) {
+      const startLeft = bar.scrollLeft;
+      const delta = target - startLeft;
+      if (Math.abs(delta) < 1) return;
+      const startTime = performance.now();
+      (function step(now) {
+        const t = Math.min(1, (now - startTime) / duration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        bar.scrollLeft = startLeft + delta * eased;
+        if (t < 1) requestAnimationFrame(step);
+      })(startTime);
+    }
+
+    function centerTab(el, animated) {
+      const barRect = bar.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const target = bar.scrollLeft + (elRect.left - barRect.left) - (barRect.width - elRect.width) / 2;
+      if (animated) animateScrollTo(target, 380);
+      else bar.scrollLeft = target;
+    }
+
+    function wrapIfNeeded() {
+      const w = setWidth();
+      if (bar.scrollLeft < w * 0.5) {
+        bar.scrollLeft += w;
+        currentDomIndex += projectCount;
+      } else if (bar.scrollLeft > w * 1.5) {
+        bar.scrollLeft -= w;
+        currentDomIndex -= projectCount;
+      }
+    }
+
+    function activate(domIndex, opts) {
+      opts = opts || {};
+      const pIdx = ((domIndex % projectCount) + projectCount) % projectCount;
+      currentDomIndex = domIndex;
+      allTabs.forEach(t => t.classList.toggle('active', Number(t.getAttribute('data-idx')) === pIdx));
+      workPanels.forEach((p, i) => p.classList.toggle('active', i === pIdx));
+      const panel = workPanels[pIdx];
+      const track = panel && panel.querySelector('.wm-track');
+      if (track) track.scrollTo({ left: 0, behavior: 'auto' });
+      const dots = panel && panel.querySelector('.wm-dots');
+      if (dots) dots.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === 0));
+      if (!opts.skipScroll) {
+        centerTab(allTabs[domIndex], true);
+        setTimeout(wrapIfNeeded, 420);
+      }
+    }
+
+    allTabs.forEach((tab, domIdx) => tab.addEventListener('click', () => activate(domIdx)));
+
+    // project-index entry point used elsewhere (e.g. clicking through a
+    // project's images advances to the next one) — keeps spinning the same
+    // direction from wherever the wheel currently is, rather than jumping
+    window.activateWorkTab = function (pIdx) {
+      const wrappedP = ((pIdx % projectCount) + projectCount) % projectCount;
+      const currentP = ((currentDomIndex % projectCount) + projectCount) % projectCount;
+      let diff = wrappedP - currentP;
+      if (diff > projectCount / 2) diff -= projectCount;
+      if (diff < -projectCount / 2) diff += projectCount;
+      activate(currentDomIndex + diff);
+    };
+
+    centerTab(allTabs[currentDomIndex], false);
+  })();
 
   // browser-topbar traffic lights — clicking any of them jumps to Contact
   document.querySelectorAll('.browser-topbar span').forEach(dot => {
