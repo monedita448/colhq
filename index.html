@@ -244,6 +244,7 @@
   .browser-topbar span:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
   .browser-tabs{display:flex;gap:2px;padding:12px 12px 0;background:#0d0d0e;overflow-x:auto;scrollbar-width:none;}
   .browser-tabs::-webkit-scrollbar{display:none;}
+  .browser-tabs-spacer{flex:0 0 50%;}
   .browser-tab{font-family:var(--sans);font-size:12.5px;letter-spacing:0.01em;padding:7px 16px;margin-bottom:8px;border:1px solid transparent;border-radius:100px;cursor:pointer;white-space:nowrap;color:var(--muted);background:transparent;transition:color 0.25s ease, border-color 0.25s ease, background 0.25s ease;}
   .browser-tab:hover{color:var(--white);}
   .browser-tab.active{color:var(--accent-text);border-color:var(--accent);background:var(--accent-soft);}
@@ -430,6 +431,7 @@
     <div class="browser-shell reveal">
       <div class="browser-topbar"><span class="r"></span><span class="a"></span><span class="g"></span></div>
       <div class="browser-tabs" id="workTabs">
+        <span class="browser-tabs-spacer" aria-hidden="true"></span>
         <button type="button" class="browser-tab active" data-url="pslroofrepair.com">PSL Roof Repair</button>
         <button type="button" class="browser-tab" data-url="trendsettersbarbershop.com">Trendsetters</button>
         <button type="button" class="browser-tab" data-url="cerrajero24horas.co">Cerrajero 24h</button>
@@ -440,6 +442,7 @@
         <button type="button" class="browser-tab" data-url="internal.col.systems/promax · private">Pro Max Parts</button>
         <button type="button" class="browser-tab" data-url="strategicglobal.app">Strategic Ai</button>
         <button type="button" class="browser-tab" data-url="hitscend.com">HitScend</button>
+        <span class="browser-tabs-spacer" aria-hidden="true"></span>
       </div>
       <div class="browser-viewport" id="workViewport">
 
